@@ -1,0 +1,10 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+
+# Rootstock Testnet = chain id 31. Set ROOTSTOCK_TESTNET_RPC_URL in your environment.
+[rpc_endpoints]
+rootstock-testnet = "${ROOTSTOCK_TESTNET_RPC_URL}"
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
