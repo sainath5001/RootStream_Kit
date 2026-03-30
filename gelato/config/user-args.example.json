@@ -1,0 +1,11 @@
+{
+  "rootstream": "0x067FDf1C8e778fDf1bEFa1DB6debD89491EA9B45",
+  "fromBlock": 7495000,
+  "logChunkSize": 2000,
+  "maxGetLogsChunks": 40,
+  "maxStreamIdsToCheck": 150,
+  "maxExecutionsPerRun": 8,
+  "preferScan": true,
+  "scanBatchSize": 150,
+  "startStreamId": 1
+}

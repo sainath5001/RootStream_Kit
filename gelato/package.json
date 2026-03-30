@@ -1,0 +1,33 @@
+{
+  "name": "rootstream-gelato",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gelato Web3 Functions for Rootstream recurring payments (Rootstock)",
+  "scripts": {
+    "build": "npx tsc",
+    "test:w3f": "NODE_OPTIONS=--dns-result-order=ipv4first dotenv -- npx w3f test web3-functions/rootstream-payments/index.ts --chain-id=31 --logs",
+    "test:w3f:public-rpc": "NODE_OPTIONS=--dns-result-order=ipv4first PROVIDER_URLS=https://public-node.testnet.rsk.co npx w3f test web3-functions/rootstream-payments/index.ts --chain-id=31 --logs"
+  },
+  "dependencies": {
+    "@gelatonetwork/web3-functions-sdk": "^2.4.4",
+    "@ethersproject/abi": "5.7.0",
+    "@ethersproject/address": "5.7.0",
+    "@ethersproject/bignumber": "5.7.0",
+    "@ethersproject/contracts": "5.7.0",
+    "@ethersproject/providers": "5.7.2",
+    "@ethersproject/bytes": "5.7.0"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^11.0.0",
+    "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "tar": "^7.5.13",
+    "esbuild": "^0.27.4",
+    "dockerode": "^4.0.10",
+    "tar-fs": "^2.1.4",
+    "@gelatonetwork/web3-functions-sdk": {
+      "@ethersproject/providers": "5.7.2"
+    }
+  }
+}
