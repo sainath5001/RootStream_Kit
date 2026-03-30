@@ -1,0 +1,103 @@
+# getAllStreams
+query GetAllStreams($limit: Int = 50, $offset: Int = 0, $active: Boolean) {
+  Stream(
+    limit: $limit
+    offset: $offset
+    order_by: { createdAt: desc }
+    where: { active: { _eq: $active } }
+  ) {
+    id
+    streamId
+    active
+    amountPerInterval
+    interval
+    lastExecuted
+    totalPaid
+    executionCount
+    createdAt
+    sender { id }
+    recipient { id }
+  }
+}
+
+# getUserStreams(address)
+query GetUserStreams($user: Bytes!, $limit: Int = 50, $offset: Int = 0) {
+  Stream(
+    limit: $limit
+    offset: $offset
+    order_by: { createdAt: desc }
+    where: { sender: { id: { _eq: $user } } }
+  ) {
+    id
+    streamId
+    active
+    amountPerInterval
+    interval
+    lastExecuted
+    totalPaid
+    executionCount
+    createdAt
+    recipient { id }
+  }
+}
+
+# getPaymentHistory(streamId)
+query GetPaymentHistory($streamId: ID!, $limit: Int = 100, $offset: Int = 0) {
+  Payment(
+    limit: $limit
+    offset: $offset
+    order_by: { blockNumber: desc, logIndex: desc }
+    where: { stream: { id: { _eq: $streamId } } }
+  ) {
+    id
+    amount
+    executedAt
+    executedAtUnix
+    txHash
+    blockNumber
+    sender { id }
+    recipient { id }
+  }
+}
+
+# getAnalytics
+query GetAnalytics {
+  Analytics_by_pk(id: "global") {
+    totalStreams
+    activeStreams
+    totalPayments
+    totalPaid
+    totalDeposited
+    totalWithdrawn
+    updatedAt
+  }
+}
+
+# Sample: fetch active streams
+query ActiveStreams($limit: Int = 25) {
+  Stream(limit: $limit, order_by: { createdAt: desc }, where: { active: { _eq: true } }) {
+    id
+    sender { id }
+    recipient { id }
+    amountPerInterval
+    interval
+    lastExecuted
+    totalPaid
+  }
+}
+
+# Sample: fetch user analytics
+query UserAnalytics($user: Bytes!) {
+  User_by_pk(id: $user) {
+    id
+    totalStreamsCreated
+    totalStreamsReceived
+    totalDeposited
+    totalWithdrawn
+    totalPaidSent
+    totalPaidReceived
+    derivedBalance
+    streamsSent_aggregate { aggregate { count } }
+    paymentsSent_aggregate { aggregate { count } }
+  }
+}

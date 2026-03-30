@@ -1,0 +1,17 @@
+{
+  "name": "rootstream-envio",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Envio HyperIndex for Rootstream (Rootstock Testnet)",
+  "scripts": {
+    "codegen": "pnpm envio codegen",
+    "dev": "pnpm envio dev",
+    "start": "pnpm envio start"
+  },
+  "dependencies": {
+    "envio": "^2.32.10"
+  },
+  "devDependencies": {
+    "undici": "^7.24.6"
+  }
+}

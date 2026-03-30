@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: rootstream
+description: Rootstream recurring payments indexer (Rootstock Testnet)
+
+preload_handlers: true
+
+field_selection:
+  transaction_fields:
+    - hash
+
+contracts:
+  - name: Rootstream
+    abi_file_path: ./abis/Rootstream.json
+    handler: src/EventHandlers.ts
+    events:
+      - event: "StreamCreated(uint256 indexed streamId, address indexed sender, address indexed recipient, uint256 amountPerInterval, uint256 interval, uint256 lastExecuted)"
+      - event: "PaymentExecuted(uint256 indexed streamId, address indexed sender, address indexed recipient, uint256 amount, uint256 timestamp)"
+      - event: "StreamCancelled(uint256 indexed streamId, address indexed sender)"
+      - event: "FundsDeposited(address indexed user, uint256 amount, uint256 newBalance)"
+      - event: "FundsWithdrawn(address indexed user, uint256 amount, uint256 indexed streamId)"
+
+networks:
+  - id: 31 # rootstock-testnet
+    start_block: 7495313
+    rpc:
+      # Primary RPC for historical sync + head tracking.
+      # Note: some providers restrict eth_getLogs to <= 2000 blocks per call.
+      - url: ${ROOTSTOCK_TESTNET_RPC_URL:-https://public-node.testnet.rsk.co}
+        for: sync
+        initial_block_interval: 2000
+        interval_ceiling: 2000
+        query_timeout_millis: 60000
+    contracts:
+      - name: Rootstream
+        address: ${ROOTSTREAM_ADDRESS:-0x067FDf1C8e778fDf1bEFa1DB6debD89491EA9B45}

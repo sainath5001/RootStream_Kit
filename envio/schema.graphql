@@ -1,0 +1,108 @@
+scalar Bytes
+scalar BigInt
+scalar Timestamp
+
+type Analytics {
+  id: ID!
+  totalStreams: Int!
+  activeStreams: Int!
+  totalPayments: Int!
+  totalPaid: BigInt! @config(precision: 76)
+  totalDeposited: BigInt! @config(precision: 76)
+  totalWithdrawn: BigInt! @config(precision: 76)
+  updatedAt: Timestamp!
+}
+
+type User {
+  id: Bytes!
+
+  totalStreamsCreated: Int!
+  totalStreamsReceived: Int!
+
+  totalPaidSent: BigInt! @config(precision: 76)
+  totalPaidReceived: BigInt! @config(precision: 76)
+
+  totalDeposited: BigInt! @config(precision: 76)
+  totalWithdrawn: BigInt! @config(precision: 76)
+
+  # Derived (deposit - withdrawals - executed payments)
+  derivedBalance: BigInt! @config(precision: 76)
+
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+
+  streamsSent: [Stream!]! @derivedFrom(field: "sender")
+  streamsReceived: [Stream!]! @derivedFrom(field: "recipient")
+  deposits: [Deposit!]! @derivedFrom(field: "user")
+  withdrawals: [Withdrawal!]! @derivedFrom(field: "user")
+  paymentsSent: [Payment!]! @derivedFrom(field: "sender")
+  paymentsReceived: [Payment!]! @derivedFrom(field: "recipient")
+}
+
+type Stream {
+  id: ID!
+  streamId: BigInt! @index
+
+  sender: User! @index
+  recipient: User! @index
+
+  amountPerInterval: BigInt! @config(precision: 76)
+  interval: BigInt! @config(precision: 76)
+  lastExecuted: BigInt! @config(precision: 76)
+
+  active: Boolean! @index
+
+  createdAt: Timestamp!
+  createdAtBlock: Int!
+  createdTxHash: Bytes!
+
+  cancelledAt: Timestamp
+  cancelledTxHash: Bytes
+
+  totalPaid: BigInt! @config(precision: 76)
+  executionCount: Int!
+
+  payments: [Payment!]! @derivedFrom(field: "stream")
+}
+
+type Payment {
+  id: ID!
+
+  stream: Stream! @index
+  sender: User! @index
+  recipient: User! @index
+
+  amount: BigInt! @config(precision: 76)
+  executedAt: Timestamp!
+  executedAtUnix: BigInt! @config(precision: 76)
+
+  blockNumber: Int! @index
+  txHash: Bytes! @index
+  logIndex: Int!
+}
+
+type Deposit {
+  id: ID!
+
+  user: User! @index
+  amount: BigInt! @config(precision: 76)
+  newBalance: BigInt! @config(precision: 76)
+
+  createdAt: Timestamp!
+  blockNumber: Int! @index
+  txHash: Bytes! @index
+  logIndex: Int!
+}
+
+type Withdrawal {
+  id: ID!
+
+  user: User! @index
+  stream: Stream @index
+  amount: BigInt! @config(precision: 76)
+
+  createdAt: Timestamp!
+  blockNumber: Int! @index
+  txHash: Bytes! @index
+  logIndex: Int!
+}
