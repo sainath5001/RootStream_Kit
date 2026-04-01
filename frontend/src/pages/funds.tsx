@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { parseEther } from "viem";
 import { useAccount, useWaitForTransactionReceipt } from "wagmi";
@@ -16,6 +16,40 @@ export default function FundsPage() {
   const { address: contractAddress, abi } = useRootstreamContract();
   const write = useRootstreamWrite();
   const receipt = useWaitForTransactionReceipt({ hash: write.data });
+  const txNotifiedRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const hash = write.data;
+    if (!hash || receipt.isPending || receipt.isLoading) return;
+    if (txNotifiedRef.current === hash) return;
+    if (receipt.isSuccess && receipt.data) {
+      txNotifiedRef.current = hash;
+      if (receipt.data.status === "reverted") {
+        toast.error("Transaction reverted (e.g. withdraw needs all streams cancelled first).", {
+          id: "tx",
+          duration: 7000,
+        });
+        balance.refetch();
+        activeCount.refetch();
+        return;
+      }
+      toast.success("Transaction confirmed", { id: "tx" });
+      balance.refetch();
+      activeCount.refetch();
+    } else if (receipt.isError) {
+      txNotifiedRef.current = hash;
+      toast.error("Transaction failed", { id: "tx" });
+    }
+  }, [
+    write.data,
+    receipt.isPending,
+    receipt.isLoading,
+    receipt.isSuccess,
+    receipt.isError,
+    receipt.data,
+    balance,
+    activeCount,
+  ]);
 
   const [depositAmount, setDepositAmount] = useState("0.0001");
   const [withdrawStreamId, setWithdrawStreamId] = useState("1");
@@ -37,6 +71,7 @@ export default function FundsPage() {
     if (!isConnected) return toast.error("Connect your wallet first");
     if (errors.depositAmount) return toast.error("Fix deposit amount");
     try {
+      txNotifiedRef.current = undefined;
       write.writeContract({
         address: contractAddress,
         abi,
@@ -53,6 +88,7 @@ export default function FundsPage() {
     if (!isConnected) return toast.error("Connect your wallet first");
     if (errors.withdrawStreamId) return toast.error("Fix stream id");
     try {
+      txNotifiedRef.current = undefined;
       write.writeContract({
         address: contractAddress,
         abi,
@@ -63,14 +99,6 @@ export default function FundsPage() {
     } catch (e: any) {
       toast.error(e?.shortMessage ?? e?.message ?? "Withdraw failed");
     }
-  }
-
-  if (receipt.isSuccess) {
-    toast.success("Transaction confirmed", { id: "tx" });
-    balance.refetch();
-    activeCount.refetch();
-  } else if (receipt.isError) {
-    toast.error("Transaction failed", { id: "tx" });
   }
 
   const bal = (balance.data as bigint | undefined) ?? 0n;
@@ -100,6 +128,12 @@ export default function FundsPage() {
                 <div className="mt-1 text-xs text-zinc-500">
                   Active streams: {activeCount.isLoading ? "…" : String(active)}
                 </div>
+                {bal === 0n && active > 0n ? (
+                  <p className="mt-2 text-xs text-amber-800">
+                    Balance 0 with active streams usually means payouts already used your prepaid RBTC — deposit
+                    again before Execute, or Execute will revert.
+                  </p>
+                ) : null}
               </div>
             </div>
           )}

@@ -13,6 +13,27 @@ export const ROOTSTREAM_ABI = [
     inputs: [{ name: "", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "getUserStreams",
+    stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ name: "", type: "uint256[]" }],
+  },
+  {
+    type: "function",
+    name: "streams",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [
+      { name: "sender", type: "address" },
+      { name: "recipient", type: "address" },
+      { name: "amountPerInterval", type: "uint256" },
+      { name: "interval", type: "uint256" },
+      { name: "lastExecuted", type: "uint256" },
+      { name: "active", type: "bool" },
+    ],
+  },
   { type: "function", name: "depositFunds", stateMutability: "payable", inputs: [], outputs: [] },
   {
     type: "function",

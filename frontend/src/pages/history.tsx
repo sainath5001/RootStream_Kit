@@ -1,36 +1,62 @@
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { Layout } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { Field } from "@/components/Field";
 import { useStreamPayments, useUserPayments } from "@/hooks/useEnvio";
+import { useChainPaymentLogs } from "@/hooks/useChainPaymentLogs";
+import { mergePaymentHistory, type EnvioPaymentRow } from "@/services/mergePaymentHistory";
 import { formatRbtc, shortAddr } from "@/services/format";
+import { Button } from "@/components/Button";
 
-export default function HistoryPage() {
+function HistoryPage() {
   const { address, isConnected } = useAccount();
   const addrLower = address?.toLowerCase();
 
   const [mode, setMode] = useState<"user" | "stream">("user");
   const [streamId, setStreamId] = useState("1");
 
-  const [{ data: userPayments, fetching: userFetching, error: userError }] = useUserPayments(addrLower);
-  const [{ data: streamPayments, fetching: streamFetching, error: streamError }] = useStreamPayments(
-    mode === "stream" ? streamId : undefined
-  );
+  const [{ data: userPayments, fetching: userFetching, error: userError }, reexecUserPayments] =
+    useUserPayments(addrLower);
+  const [{ data: streamPayments, fetching: streamFetching, error: streamError }, reexecStreamPayments] =
+    useStreamPayments(mode === "stream" ? streamId : undefined);
 
-  const rows = useMemo(() => {
+  const { data: chainLogs = [], refetch: refetchChainLogs, isFetching: chainFetching } = useChainPaymentLogs();
+
+  const chainFiltered = useMemo(() => {
+    if (mode !== "stream") return chainLogs;
+    try {
+      const sid = BigInt(streamId);
+      return chainLogs.filter((l) => l.streamId === sid);
+    } catch {
+      return [];
+    }
+  }, [mode, streamId, chainLogs]);
+
+  const envioRows = useMemo(() => {
     if (mode === "user") return userPayments?.Payment ?? [];
     return streamPayments?.Payment ?? [];
   }, [mode, userPayments, streamPayments]);
 
-  const fetching = mode === "user" ? userFetching : streamFetching;
-  const error = mode === "user" ? userError : streamError;
+  const mergedRows = useMemo(
+    () => mergePaymentHistory(envioRows as EnvioPaymentRow[], chainFiltered),
+    [envioRows, chainFiltered],
+  );
+
+  const envioFetching = mode === "user" ? userFetching : streamFetching;
+  const envioError = mode === "user" ? userError : streamError;
+  const loading = envioFetching || (isConnected && chainFetching);
 
   return (
     <Layout>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">History</h1>
-        <p className="text-sm text-zinc-600">Indexed payments from Envio GraphQL.</p>
+        <p className="text-sm text-zinc-600">
+          Merges Envio with an RPC scan of your <code className="text-xs">PaymentExecuted</code> logs. If the
+          indexer stalls, recent payments still appear here. Very old payments outside the lookback window need
+          Envio or a larger <code className="text-xs">NEXT_PUBLIC_PAYMENT_LOG_LOOKBACK_BLOCKS</code>.
+        </p>
       </div>
 
       <div className="mt-6">
@@ -38,7 +64,17 @@ export default function HistoryPage() {
           title="Payments"
           description={mode === "user" ? "Payments you sent" : "Payments for a specific stream"}
           right={
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (mode === "user") reexecUserPayments({ requestPolicy: "network-only" });
+                  else reexecStreamPayments({ requestPolicy: "network-only" });
+                  void refetchChainLogs();
+                }}
+              >
+                Refresh
+              </Button>
               <button
                 className={[
                   "rounded-lg px-3 py-1.5 ring-1",
@@ -76,11 +112,15 @@ export default function HistoryPage() {
             </div>
           ) : null}
 
-          {fetching ? (
+          {envioError ? (
+            <p className="mb-2 text-sm text-amber-800">
+              Envio query issue (RPC table may still show rows): {envioError.message}
+            </p>
+          ) : null}
+
+          {loading ? (
             <p className="text-sm text-zinc-600">Loading…</p>
-          ) : error ? (
-            <p className="text-sm text-red-600">{error.message}</p>
-          ) : rows.length === 0 ? (
+          ) : mergedRows.length === 0 ? (
             <p className="text-sm text-zinc-600">
               No payments found{mode === "user" && addrLower ? ` for ${shortAddr(addrLower)}` : ""}.
             </p>
@@ -97,12 +137,12 @@ export default function HistoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((p: any) => (
+                  {mergedRows.map((p) => (
                     <tr key={p.id} className="border-b border-zinc-100">
-                      <td className="py-3">{new Date(p.executedAt).toLocaleString()}</td>
-                      <td className="py-3">{p.stream?.streamId ?? p.stream?.id ?? "-"}</td>
-                      <td className="py-3">{shortAddr(p.recipient?.id)}</td>
-                      <td className="py-3">{formatRbtc(BigInt(p.amount))}</td>
+                      <td className="py-3">{p.when.toLocaleString()}</td>
+                      <td className="py-3">{p.streamId || "-"}</td>
+                      <td className="py-3">{shortAddr(p.recipient)}</td>
+                      <td className="py-3">{formatRbtc(p.amount)}</td>
                       <td className="py-3 font-mono text-xs">{shortAddr(p.txHash)}</td>
                     </tr>
                   ))}
@@ -116,3 +156,4 @@ export default function HistoryPage() {
   );
 }
 
+export default dynamic(() => Promise.resolve(HistoryPage), { ssr: false });

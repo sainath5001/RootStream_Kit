@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { isAddress, parseEther, type Address } from "viem";
 import { useAccount, useWaitForTransactionReceipt } from "wagmi";
@@ -17,6 +17,7 @@ export default function CreateStreamPage() {
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("0.0001");
   const [interval, setInterval] = useState("60");
+  const [triedSubmit, setTriedSubmit] = useState(false);
 
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
@@ -34,11 +35,32 @@ export default function CreateStreamPage() {
     return e;
   }, [recipient, amount, interval]);
 
+  const txNotifiedRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const hash = write.data;
+    if (!hash || receipt.isPending || receipt.isLoading) return;
+    if (txNotifiedRef.current === hash) return;
+    if (receipt.isSuccess && receipt.data) {
+      txNotifiedRef.current = hash;
+      if (receipt.data.status === "reverted") {
+        toast.error("Transaction reverted (check recipient, gas, or network).", { id: "tx", duration: 6000 });
+        return;
+      }
+      toast.success("Stream created", { id: "tx" });
+    } else if (receipt.isError) {
+      txNotifiedRef.current = hash;
+      toast.error("Transaction failed", { id: "tx" });
+    }
+  }, [write.data, receipt.isPending, receipt.isLoading, receipt.isSuccess, receipt.isError, receipt.data]);
+
   async function submit() {
+    setTriedSubmit(true);
     if (!isConnected) return toast.error("Connect your wallet first");
     if (Object.keys(errors).length) return toast.error("Fix the form errors");
 
     try {
+      txNotifiedRef.current = undefined;
       write.writeContract({
         address: contractAddress,
         abi,
@@ -51,15 +73,13 @@ export default function CreateStreamPage() {
     }
   }
 
-  if (receipt.isSuccess) toast.success("Stream created", { id: "tx" });
-  if (receipt.isError) toast.error("Transaction failed", { id: "tx" });
-
   return (
     <Layout>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Create Stream</h1>
         <p className="text-sm text-zinc-600">
-          Creates a new recurring payment stream (prepaid model). Make sure you’ve deposited enough.
+          Creates a new recurring payment stream (prepaid model). Deposit RBTC on the Funds page first — each
+          Execute pulls from your prepaid balance in the contract, not directly from your wallet.
         </p>
       </div>
 
@@ -71,7 +91,7 @@ export default function CreateStreamPage() {
               placeholder="0x…"
               value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
-              error={errors.recipient}
+              error={triedSubmit ? errors.recipient : undefined}
               spellCheck={false}
             />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -81,7 +101,7 @@ export default function CreateStreamPage() {
                 inputMode="decimal"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                error={errors.amount}
+                error={triedSubmit ? errors.amount : undefined}
               />
               <Field
                 label="Interval (seconds)"
@@ -89,7 +109,7 @@ export default function CreateStreamPage() {
                 inputMode="numeric"
                 value={interval}
                 onChange={(e) => setInterval(e.target.value)}
-                error={errors.interval}
+                error={triedSubmit ? errors.interval : undefined}
               />
             </div>
 

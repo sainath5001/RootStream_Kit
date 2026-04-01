@@ -1,4 +1,5 @@
 import dynamic from "next/dynamic";
+import { useEffect, useMemo, useRef } from "react";
 
 import toast from "react-hot-toast";
 import { Layout } from "@/components/Layout";
@@ -7,6 +8,8 @@ import { Button } from "@/components/Button";
 import { useAccount, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther, type Address } from "viem";
 import { useAnalytics, useUserStreams } from "@/hooks/useEnvio";
+import { useUserStreamsOnChain } from "@/hooks/useUserStreamsOnChain";
+import { useChainPaymentLogs } from "@/hooks/useChainPaymentLogs";
 import { useActiveStreamCount, useBalance, useRootstreamContract, useRootstreamWrite } from "@/hooks/useRootstream";
 import { formatRbtc, secondsToHuman, shortAddr } from "@/services/format";
 
@@ -14,9 +17,22 @@ function DashboardPage() {
   const { address, isConnected } = useAccount();
   const addrLower = address?.toLowerCase();
 
-  const [{ data: analyticsData, fetching: analyticsFetching, error: analyticsError }] = useAnalytics();
+  const [{ data: analyticsData, fetching: analyticsFetching, error: analyticsError }, reexecAnalytics] =
+    useAnalytics();
   const [{ data: streamsData, fetching: streamsFetching, error: streamsError }, reexecStreams] =
     useUserStreams(addrLower);
+  const { streams: chainStreams, isLoading: chainStreamsLoading, refetch: refetchChainStreams } =
+    useUserStreamsOnChain();
+  const { data: chainPayLogs = [], refetch: refetchChainPayLogs } = useChainPaymentLogs();
+
+  const chainPaidByStream = useMemo(() => {
+    const m = new Map<string, bigint>();
+    for (const log of chainPayLogs) {
+      const k = log.streamId.toString();
+      m.set(k, (m.get(k) ?? 0n) + log.amount);
+    }
+    return m;
+  }, [chainPayLogs]);
 
   const balance = useBalance();
   const activeCount = useActiveStreamCount();
@@ -24,10 +40,54 @@ function DashboardPage() {
   const { address: contractAddress, abi } = useRootstreamContract();
   const write = useRootstreamWrite();
   const receipt = useWaitForTransactionReceipt({ hash: write.data });
+  const txNotifiedRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const hash = write.data;
+    if (!hash || receipt.isPending || receipt.isLoading) return;
+    if (txNotifiedRef.current === hash) return;
+    if (receipt.isSuccess && receipt.data) {
+      txNotifiedRef.current = hash;
+      if (receipt.data.status === "reverted") {
+        toast.error(
+          "Transaction reverted. For Execute: wait until the interval passes since last payment, and keep enough prepaid balance in Rootstream.",
+          { id: "tx", duration: 8000 },
+        );
+        balance.refetch();
+        activeCount.refetch();
+        void refetchChainStreams();
+        void refetchChainPayLogs();
+        return;
+      }
+      toast.success("Transaction confirmed", { id: "tx" });
+      reexecStreams({ requestPolicy: "network-only" });
+      reexecAnalytics({ requestPolicy: "network-only" });
+      void refetchChainStreams();
+      void refetchChainPayLogs();
+      balance.refetch();
+      activeCount.refetch();
+    } else if (receipt.isError) {
+      txNotifiedRef.current = hash;
+      toast.error("Transaction failed", { id: "tx" });
+    }
+  }, [
+    write.data,
+    receipt.isPending,
+    receipt.isLoading,
+    receipt.isSuccess,
+    receipt.isError,
+    reexecStreams,
+    reexecAnalytics,
+    refetchChainStreams,
+    refetchChainPayLogs,
+    balance,
+    activeCount,
+  ]);
 
   async function depositDemo() {
     if (!address) return;
     try {
+      txNotifiedRef.current = undefined;
       write.writeContract({
         address: contractAddress,
         abi,
@@ -42,6 +102,7 @@ function DashboardPage() {
 
   async function cancelStream(streamId: bigint) {
     try {
+      txNotifiedRef.current = undefined;
       write.writeContract({
         address: contractAddress,
         abi,
@@ -56,6 +117,7 @@ function DashboardPage() {
 
   async function executePayment(streamId: bigint) {
     try {
+      txNotifiedRef.current = undefined;
       write.writeContract({
         address: contractAddress,
         abi,
@@ -68,18 +130,14 @@ function DashboardPage() {
     }
   }
 
-  if (receipt.isSuccess) {
-    toast.success("Transaction confirmed", { id: "tx" });
-    // Refresh indexer-driven data and onchain reads
-    reexecStreams({ requestPolicy: "network-only" });
-    balance.refetch();
-    activeCount.refetch();
-  } else if (receipt.isError) {
-    toast.error("Transaction failed", { id: "tx" });
+  const envioStreams = streamsData?.Stream ?? [];
+  const envioByStreamId = new Map<string, (typeof envioStreams)[0]>();
+  for (const s of envioStreams) {
+    envioByStreamId.set(String(s.streamId), s);
   }
 
-  const streams = streamsData?.Stream ?? [];
-  const activeStreams = streams.filter((s: any) => s.active);
+  const manageStreams = chainStreams;
+  const activeOnChain = manageStreams.filter((s) => s.active);
 
   const analytics = analyticsData?.Analytics_by_pk;
 
@@ -89,11 +147,21 @@ function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-zinc-600">
-            Wallet actions write to the contract, history comes from Envio GraphQL.
+            Streams and balances use live RPC. Analytics is Envio-only (can lag). History and the Paid column
+            merge Envio with recent <code className="text-xs">PaymentExecuted</code> logs from RPC (see{" "}
+            <code className="text-xs">NEXT_PUBLIC_PAYMENT_LOG_LOOKBACK_BLOCKS</code> in .env.example).
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => reexecStreams({ requestPolicy: "network-only" })}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              reexecStreams({ requestPolicy: "network-only" });
+              reexecAnalytics({ requestPolicy: "network-only" });
+              void refetchChainStreams();
+              void refetchChainPayLogs();
+            }}
+          >
             Refresh
           </Button>
         </div>
@@ -101,8 +169,8 @@ function DashboardPage() {
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card
-          title="Analytics"
-          description="Indexed global totals"
+          title="Analytics (Envio)"
+          description="Global totals from indexed events only — not the same as live on-chain counts below."
           right={analyticsFetching ? <span className="text-xs text-zinc-500">Loading…</span> : null}
         >
           {analyticsError ? <p className="text-sm text-red-600">{analyticsError.message}</p> : null}
@@ -148,35 +216,44 @@ function DashboardPage() {
           )}
         </Card>
 
-        <Card title="Your streams" description="Indexed streams where you are the sender">
+        <Card
+          title="Your streams"
+          description="From contract (immediate). Envio may lag on “Paid” / analytics."
+        >
           {!isConnected ? (
             <p className="text-sm text-zinc-600">Connect your wallet to view your streams.</p>
-          ) : streamsFetching ? (
+          ) : chainStreamsLoading ? (
             <p className="text-sm text-zinc-600">Loading…</p>
-          ) : streamsError ? (
-            <p className="text-sm text-red-600">{streamsError.message}</p>
           ) : (
             <div className="text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600">Active</span>
-                <span className="font-semibold">{activeStreams.length}</span>
+                <span className="font-semibold">{activeOnChain.length}</span>
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-zinc-600">Total</span>
-                <span className="font-semibold">{streams.length}</span>
+                <span className="font-semibold">{manageStreams.length}</span>
               </div>
+              {streamsError ? (
+                <p className="mt-2 text-xs text-amber-700">Envio: {streamsError.message}</p>
+              ) : streamsFetching ? (
+                <p className="mt-2 text-xs text-zinc-500">Refreshing indexer…</p>
+              ) : null}
             </div>
           )}
         </Card>
       </div>
 
       <div className="mt-6">
-        <Card title="Manage streams" description="Cancel or execute manually (fallback)">
+        <Card
+          title="Manage streams"
+          description="Streams from contract. Paid = higher of Envio total vs sum of your PaymentExecuted logs in the RPC lookback window."
+        >
           {!isConnected ? (
             <p className="text-sm text-zinc-600">Connect your wallet.</p>
-          ) : streamsFetching ? (
+          ) : chainStreamsLoading ? (
             <p className="text-sm text-zinc-600">Loading…</p>
-          ) : streams.length === 0 ? (
+          ) : manageStreams.length === 0 ? (
             <p className="text-sm text-zinc-600">No streams found for {shortAddr(address)}.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -193,29 +270,34 @@ function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {streams.map((s: any) => {
-                    const idBn = BigInt(s.streamId);
-                    const recipient = s.recipient?.id as Address | undefined;
+                  {manageStreams.map((s) => {
+                    const idKey = s.streamId.toString();
+                    const envio = envioByStreamId.get(idKey);
+                    const envioPaid = envio?.totalPaid != null ? BigInt(envio.totalPaid as string) : 0n;
+                    const rpcPaid = chainPaidByStream.get(idKey) ?? 0n;
+                    const displayPaid = rpcPaid > envioPaid ? rpcPaid : envioPaid;
                     return (
-                      <tr key={s.id} className="border-b border-zinc-100">
-                        <td className="py-3 font-medium">{s.streamId}</td>
-                        <td className="py-3">{shortAddr(recipient)}</td>
-                        <td className="py-3">{formatRbtc(BigInt(s.amountPerInterval))}</td>
-                        <td className="py-3">{secondsToHuman(BigInt(s.interval))}</td>
+                      <tr key={idKey} className="border-b border-zinc-100">
+                        <td className="py-3 font-medium">{idKey}</td>
+                        <td className="py-3">{shortAddr(s.recipient)}</td>
+                        <td className="py-3">{formatRbtc(s.amountPerInterval)}</td>
+                        <td className="py-3">{secondsToHuman(s.interval)}</td>
                         <td className="py-3">{s.active ? "Yes" : "No"}</td>
-                        <td className="py-3">{formatRbtc(BigInt(s.totalPaid ?? "0"))}</td>
+                        <td className="py-3">
+                          {displayPaid > 0n ? formatRbtc(displayPaid) : <span className="text-zinc-400">—</span>}
+                        </td>
                         <td className="py-3">
                           <div className="flex flex-wrap gap-2">
                             <Button
                               variant="secondary"
-                              onClick={() => executePayment(idBn)}
+                              onClick={() => executePayment(s.streamId)}
                               disabled={write.isPending || !s.active}
                             >
                               Execute
                             </Button>
                             <Button
                               variant="danger"
-                              onClick={() => cancelStream(idBn)}
+                              onClick={() => cancelStream(s.streamId)}
                               disabled={write.isPending || !s.active}
                             >
                               Cancel

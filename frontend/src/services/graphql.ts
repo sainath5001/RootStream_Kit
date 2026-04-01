@@ -63,7 +63,7 @@ export const USER_PAYMENTS_QUERY = gql`
 `;
 
 export const STREAM_PAYMENTS_QUERY = gql`
-  query StreamPayments($streamId: ID!) {
+  query StreamPayments($streamId: String!) {
     Payment(where: { stream: { id: { _eq: $streamId } } }, order_by: { executedAt: desc }, limit: 200) {
       id
       amount
