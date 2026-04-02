@@ -1,5 +1,5 @@
 import { createConfig, http } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { injected } from "@wagmi/core";
 import { rootstockTestnet } from "@/services/chains";
 import { getPublicEnv } from "@/services/env";
 

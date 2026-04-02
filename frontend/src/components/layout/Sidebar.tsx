@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { IconClock, IconGrid, IconPlus, IconWallet } from "@/components/ui/Icons";
 
 const items = [
@@ -19,8 +20,15 @@ export function Sidebar() {
     <aside className="hidden h-screen w-64 flex-none border-r border-[var(--rs-border)] bg-[var(--rs-bg)] lg:block">
       <div className="flex h-full flex-col px-4 py-6">
         <div className="px-2">
-          <div className="text-sm font-semibold tracking-tight text-white">Rootstream_kit</div>
-          <div className="mt-1 text-xs text-[var(--rs-muted)]">Recurring payments dashboard</div>
+          <Link href="/" className="group flex items-start gap-3 rounded-xl p-1 -m-1 transition hover:bg-[rgba(255,255,255,0.04)]">
+            <BrandLogo withLink={false} />
+            <div className="min-w-0 pt-0.5">
+              <div className="text-sm font-semibold tracking-tight text-white group-hover:text-[var(--rs-orange)] transition-colors">
+                Rootstream_kit
+              </div>
+              <div className="mt-1 text-xs text-[var(--rs-muted)]">Recurring payments dashboard</div>
+            </div>
+          </Link>
         </div>
 
         <nav className="mt-8 flex flex-col gap-1">

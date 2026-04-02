@@ -10,6 +10,10 @@ import { AppShell } from "@/components/layout/AppShell";
 export const metadata: Metadata = {
   title: "Rootstream_kit",
   description: "Recurring payment streams on Rootstock",
+  icons: {
+    icon: [{ url: "/logo.png", type: "image/png" }],
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

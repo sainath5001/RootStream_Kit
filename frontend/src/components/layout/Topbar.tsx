@@ -2,6 +2,7 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useChainId } from "wagmi";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { IconMenu } from "@/components/ui/Icons";
 
 export function Topbar({ onMenu }: { onMenu?: () => void }) {
@@ -19,7 +20,10 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
           >
             <IconMenu className="h-5 w-5" />
           </button>
-          <div className="text-sm font-semibold text-white lg:hidden">Rootstream_kit</div>
+          <div className="flex items-center gap-2 lg:hidden">
+            <BrandLogo size="sm" withLink />
+            <span className="text-sm font-semibold text-white">Rootstream_kit</span>
+          </div>
           <div className="hidden text-xs text-[var(--rs-muted)] sm:block">
             {isConnected ? (
               <>

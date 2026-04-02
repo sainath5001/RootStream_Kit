@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { IconClock, IconGrid, IconPlus, IconWallet } from "@/components/ui/Icons";
@@ -42,8 +43,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             aria-hidden="true"
           />
           <div className="absolute left-0 top-0 h-full w-72 border-r border-[var(--rs-border)] bg-[var(--rs-bg)]">
-            <div className="flex items-center justify-between px-4 py-4">
-              <div className="text-sm font-semibold text-white">Rootstream_kit</div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <BrandLogo size="sm" withLink />
+                <span className="truncate text-sm font-semibold text-white">Rootstream_kit</span>
+              </div>
               <button
                 className="rounded-xl bg-[rgba(255,255,255,0.06)] px-3 py-2 text-xs text-white ring-1 ring-[var(--rs-border)]"
                 onClick={() => setMobileOpen(false)}
