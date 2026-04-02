@@ -1,83 +1,124 @@
-# Gelato Web3 Functions — Rootstream
+# Gelato — Rootstream Web3 Function
 
-Automates `executePayment(streamId)` on **Rootstream** when a stream is **active**, **interval elapsed**, and the sender **has enough prepaid balance**.
+This package is a **Gelato Web3 Function** that periodically checks **Rootstream** streams and, when due, returns calldata so Gelato can submit **`executePayment(streamId)`** on **Rootstock Testnet (chain id 31)**.
 
-## How Gelato runs this
+Deploy the contract first (see **`../contracts/README.md`**), then configure **`rootstream`** and **`fromBlock`** here to match that deployment.
 
-1. **Trigger:** You create an **Automate** task on [Gelato](https://app.gelato.network/) targeting this Web3 Function with a **time interval** (e.g. every 5 minutes) on **Rootstock Testnet (31)**.
-2. **Execution:** Gelato’s runtime invokes `onRun`, which returns either `canExec: false` (no tx) or `canExec: true` with one or more `{ to, data }` payloads.
-3. **On-chain:** Gelato’s executor sends those txs to your **Rootstream** contract. Invalid streams are skipped off-chain; the contract still enforces all rules on execution.
+## How it runs
+
+1. **You** create an **Automate** task on [Gelato](https://app.gelato.network/) for this Web3 Function on **Rootstock Testnet (31)** with a time cadence (for example every few minutes).
+2. **Gelato** calls `onRun`. The function returns either **`canExec: false`** (no transaction) or **`canExec: true`** with one or more `{ to, data }` calls.
+3. **Executors** broadcast those transactions to your **Rootstream** address. The contract still enforces rules on-chain; the function only filters obvious non-starters off-chain.
 
 ## Layout
 
-- `web3-functions/rootstream-payments/index.ts` — function logic  
-- `web3-functions/rootstream-payments/schema.json` — runtime + **typed** `userArgs`  
-- `web3-functions/rootstream-payments/userArgs.json` — values for local `w3f test` / template for IPFS upload  
-- `config/user-args.example.json` — copy/reference for deployment args  
+| Path | Purpose |
+|------|---------|
+| `web3-functions/rootstream-payments/index.ts` | Web3 Function entrypoint (`Web3Function.onRun`) |
+| `web3-functions/rootstream-payments/schema.json` | Runtime limits + **typed `userArgs`** for Gelato |
+| `web3-functions/rootstream-payments/userArgs.json` | Values used by **`w3f test`**; template for deployment args |
+| `config/user-args.example.json` | Example args you can copy into `userArgs.json` or the Gelato UI |
 
-## Local test
+## Discovery logic (short)
+
+By default the function tries to find stream IDs from **`StreamCreated`** logs via **`eth_getLogs`** from **`fromBlock`** upward (chunked, with limits).
+
+If the RPC **does not support `eth_getLogs`**, returns **temporary errors**, or you set **`preferScan: true`**, it **falls back** to scanning stream IDs in order using **`nextStreamId()`** and a **persistent cursor** in Gelato storage (`scanCursor:…`). That path works on restricted public nodes but is less efficient for many streams.
+
+For each candidate ID it checks: stream **active**, **interval elapsed** (using latest block timestamp), sender **balance ≥ amountPerInterval**. Up to **`maxExecutionsPerRun`** due streams are batched into **`callData`**.
+
+## Requirements
+
+- **Node.js** (LTS recommended)
+- **npm** and this repo’s `gelato/` dependencies
+
+## Setup
 
 ```bash
 cd gelato
 cp .env.example .env
 npm install
-# Edit web3-functions/rootstream-payments/userArgs.json (rootstream + fromBlock)
+npm run build
+```
+
+Edit **`web3-functions/rootstream-payments/userArgs.json`** (or copy from `config/user-args.example.json`):
+
+- **`rootstream`** — address from your Foundry deploy  
+- **`fromBlock`** — deployment block (or first block you care about) for log scanning  
+- Set **`preferScan: true`** if your RPC blocks **`eth_getLogs`** (common on some free Rootstock endpoints)
+
+## Local test
+
+```bash
 npm run test:w3f
 ```
 
-`npm run test:w3f` loads **`.env`** via `dotenv-cli` (the Gelato CLI itself does **not** read `.env`). `PROVIDER_URLS` must be a **chain-31** JSON-RPC URL, no spaces, typically **no quotes** in `.env`:
+This uses **`dotenv-cli`** to load **`.env`**. The Gelato CLI alone does **not** read `.env`.
+
+**`PROVIDER_URLS`** must be a Rootstock testnet JSON-RPC URL (chain **31**), comma-separated if you list several, typically **no quotes** in `.env`:
 
 ```env
 PROVIDER_URLS=https://public-node.testnet.rsk.co
 ```
 
-If you see **`could not detect network`** while **`curl`** to the same RPC works, you are often hitting **Node’s IPv6-first DNS** on **WSL2**: Node tries IPv6 first, the path fails, and ethers never gets `eth_chainId`. The npm scripts already set:
+### WSL2 / “could not detect network”
+
+If **`curl`** to the RPC works but **`w3f test`** fails with **could not detect network**, Node may be preferring **IPv6** DNS on **WSL2**. The npm scripts set:
 
 `NODE_OPTIONS=--dns-result-order=ipv4first`
 
-If you run `w3f` by hand, use the same flag or run `npm run test:w3f` / `test:w3f:public-rpc`.
+Use **`npm run test:w3f`** / **`npm run test:w3f:public-rpc`**, or export the same **`NODE_OPTIONS`** when invoking **`w3f`** manually.
 
-Other checks:
-
-1. Confirm RPC:  
-   `curl -sS -m 20 -X POST https://public-node.testnet.rsk.co -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'`
-2. `npm run test:w3f:public-rpc` (uses public node + IPv4-first).
-3. Try another Rootstock testnet URL in `.env` (e.g. from [rpc.rootstock.io](https://rpc.rootstock.io/)).
-
-## Deploy function to Gelato
+Quick RPC check:
 
 ```bash
+curl -sS -m 20 -X POST https://public-node.testnet.rsk.co \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
+```
+
+You should see **`0x1f`** (31). Try another testnet URL if needed (for example from [Rootstock RPC](https://rpc.rootstock.io/)).
+
+## Deploy to Gelato
+
+```bash
+npm run build
 npx w3f deploy web3-functions/rootstream-payments/index.ts
 ```
 
-Follow CLI prompts, then create an **Automate Web3 Function** task in the Gelato app: set **network** Rootstock testnet, paste **user args** (same keys as `schema.json`), and fund the **1Balance** / task budget.
+Follow the CLI prompts, then in the **Gelato app** create an **Automate Web3 Function** task: network **Rootstock testnet**, paste **user args** with the same keys as **`schema.json`**, and fund **1Balance** / the task budget so executions can run.
 
-## Tuning `userArgs`
+## `userArgs` reference
 
-| Key | Role |
-|-----|------|
-| `rootstream` | Rootstream proxy/impl address |
-| `fromBlock` | First block for `StreamCreated` log scan (≤ deployment block) |
-| `logChunkSize` | `eth_getLogs` window (RPC limit–safe) |
-| `maxGetLogsChunks` | Cap RPC calls per run; raise if history is deep |
-| `maxStreamIdsToCheck` | Max distinct stream IDs to read after log discovery |
-| `maxExecutionsPerRun` | Max `executePayment` txs in one Gelato batch |
+| Key | Type | Role |
+|-----|------|------|
+| `rootstream` | string | Deployed **Rootstream** contract address |
+| `fromBlock` | number | First block for **`StreamCreated`** log scan (≤ deploy block) |
+| `logChunkSize` | number | Block window per **`eth_getLogs`** request (stay within RPC limits) |
+| `maxGetLogsChunks` | number | Max log chunks per run; increase if history is deep |
+| `maxStreamIdsToCheck` | number | Max stream IDs to evaluate after discovery |
+| `maxExecutionsPerRun` | number | Max **`executePayment`** calls in one Gelato batch |
+| `preferScan` | boolean | If **true**, skip logs and use **scan** mode with storage cursor |
+| `scanBatchSize` | number | How many IDs to advance per run in **scan** mode |
+| `startStreamId` | number | Initial lower bound for the scan cursor when storage is empty |
 
-## npm audit and the remaining `elliptic` findings
+## `npm audit` and `elliptic` (ethers v5)
 
-After the `overrides` in `package.json` (newer `tar`, `esbuild`, `dockerode`, `tar-fs`), **`npm audit` may still report ~10 low issues**, all from the same advisory: [GHSA-848j-6mx2-7j84](https://github.com/advisories/GHSA-848j-6mx2-7j84) on **`elliptic`**, pulled in by **`@ethersproject/signing-key`** → **`@ethersproject/*`** → **`@gelatonetwork/web3-functions-sdk`**.
+After **`package.json` overrides** (`tar`, `esbuild`, `dockerode`, `tar-fs`), **`npm audit`** may still report low issues from **[GHSA-848j-6mx2-7j84](https://github.com/advisories/GHSA-848j-6mx2-7j84)** on **`elliptic`**, pulled in via **`@gelatonetwork/web3-functions-sdk`** → **`@ethersproject/*`**.
 
-There is **no patched `elliptic` release** on npm that clears that advisory yet, and **Gelato’s SDK is built on ethers v5** (`@ethersproject/*`). Until Gelato (or ethers v5) moves off that stack, **you cannot honestly get “0 vulnerabilities” in `npm audit`** without removing the SDK.
+**Do not run `npm audit fix --force` here** — npm may suggest downgrading **`@ethersproject/abi`**, which can break **`w3f`**.
 
-**Do not run `npm audit fix --force` here.** npm may suggest installing old `@ethersproject/abi@5.0.9`, which is a **breaking / wrong downgrade** and can break `w3f` builds.
-
-**Practical options:**
-
-1. **Accept the residual low findings** and re-run `npm audit` occasionally; upgrade `@gelatonetwork/web3-functions-sdk` when Gelato ships releases that tighten dependencies.
-2. **CI policy:** if you only want to fail on serious issues, use e.g. `npm audit --audit-level=moderate` (or `high`). That is a product choice, not a security magic wand.
-3. **Risk context:** this path is mainly **transitive**; your Web3 Function logic does not need local **secp256k1 signing** for `executePayment` simulation, but the dependency is still present for the SDK/ethers toolchain.
+Practical options: accept residual lows until Gelato/ethers v5 updates, or gate CI with e.g. **`npm audit --audit-level=moderate`**.
 
 ## Security notes
 
-- Only **due**, **active** streams with **sufficient** `balances(sender)` get calldata; others are skipped to limit reverts.
-- The contract remains the source of truth; failed simulations are avoided when possible, not guaranteed in all edge cases (e.g. race with a user tx in the same block).
+- Only streams that look **due** and **funded** off-chain get calldata; others are skipped to reduce wasted gas. The contract is still authoritative.
+- Races remain possible (for example a user spends balance in the same block); the on-chain call may still revert, which Gelato handles as a failed execution.
+
+## Related packages in this repo
+
+- **`../contracts/`** — Rootstream Solidity + Foundry deploy  
+- **`../envio/`** — indexer for events (optional for UI)  
+- **`../frontend/`** — dashboard  
+
+A root **README** summarizes the full stack when available.

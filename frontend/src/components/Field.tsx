@@ -15,22 +15,24 @@ export function Field({
   return (
     <label className="block">
       <div className="flex items-end justify-between gap-3">
-        <span className="text-sm font-medium text-zinc-900">{label}</span>
+        <span className="text-sm font-medium text-white">{label}</span>
         {right}
       </div>
       <input
         {...props}
         className={[
-          "mt-2 w-full rounded-lg bg-white px-3 py-2 text-sm ring-1",
-          error ? "ring-red-300 focus:ring-red-400" : "ring-zinc-200 focus:ring-zinc-300",
-          "outline-none",
+          "mt-2 w-full rounded-xl bg-[rgba(255,255,255,0.04)] px-3 py-2 text-sm text-white ring-1 outline-none",
+          error
+            ? "ring-[rgba(239,68,68,0.55)] focus:ring-[rgba(239,68,68,0.8)]"
+            : "ring-[var(--rs-border)] focus:ring-[rgba(255,107,0,0.35)]",
+          "placeholder:text-[var(--rs-muted)]",
           props.className ?? "",
         ].join(" ")}
       />
       {error ? (
-        <p className="mt-2 text-sm text-red-600">{error}</p>
+        <p className="mt-2 text-sm text-red-400">{error}</p>
       ) : hint ? (
-        <p className="mt-2 text-sm text-zinc-600">{hint}</p>
+        <p className="mt-2 text-sm text-[var(--rs-muted)]">{hint}</p>
       ) : null}
     </label>
   );

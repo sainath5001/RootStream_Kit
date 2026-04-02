@@ -1,66 +1,94 @@
-## Foundry
+# Contracts — Rootstream
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+Solidity contracts for **Rootstream**: prepaid **native-token** (RBTC on Rootstock) recurring payment streams. Senders fund an on-contract balance; anyone may call `executePayment` when an interval has passed, which moves one period’s amount to the recipient. This design fits **Gelato Web3 Functions** or manual execution.
 
-Foundry consists of:
+## Contents
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+| Path | Purpose |
+|------|---------|
+| `src/Rootstream.sol` | Main contract |
+| `script/DeployRootstream.s.sol` | Foundry script to deploy `Rootstream` |
+| `test/Rootstream.t.sol` | Unit tests (streams, deposits, reentrancy, failed transfers) |
 
-## Documentation
+## How it works
 
-https://book.getfoundry.sh/
+1. **Balance** — The sender deposits native currency via `depositFunds()` or a plain `receive()` transfer. Balances are tracked per address in `balances[user]`.
 
-## Usage
+2. **Stream** — `createStream(recipient, amountPerInterval, interval)` creates a stream. The sender must have enough prepaid balance when `executePayment` runs (not necessarily at creation time). `lastExecuted` is initialized to `block.timestamp`, so the first payment is due after one full `interval`.
 
-### Build
+3. **Execution** — `executePayment(streamId)` is **permissionless**: it checks the stream is active, the interval has elapsed, and the sender’s balance covers `amountPerInterval`. It updates `lastExecuted`, debits the sender’s balance, and sends native value to the recipient. **Gelato or any EOA** can call it.
 
-```shell
-$ forge build
+4. **Cancellation** — Only the stream sender can `cancelStream(streamId)`. Active streams are counted per sender via `activeStreamCount`.
+
+5. **Withdrawal** — `withdrawRemainingBalance(streamId)` returns the sender’s remaining prepaid balance **only if** all their streams are cancelled (`activeStreamCount[sender] == 0`). The given `streamId` must be one of the sender’s **inactive** streams (authorization hook).
+
+## Events (for indexing)
+
+Indexers (for example Envio) typically subscribe to:
+
+- `StreamCreated` — new stream and parameters  
+- `PaymentExecuted` — amount and timestamp per payout  
+- `StreamCancelled` — stream stopped  
+- `FundsDeposited` / `FundsWithdrawn` — balance changes  
+
+## Requirements
+
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`, optional `anvil`)
+
+## Setup
+
+From this directory:
+
+```bash
+# If submodules are missing:
+git submodule update --init --recursive
+
+cp .env.example .env
+# Edit .env: PRIVATE_KEY (testnet-only key), ROOTSTOCK_TESTNET_RPC_URL
 ```
 
-### Test
+`foundry.toml` defines an RPC alias `rootstock-testnet` that reads `ROOTSTOCK_TESTNET_RPC_URL`. Rootstock **Testnet** chain id is **31**.
 
-```shell
-$ forge test
+## Build and test
+
+```bash
+forge build
+forge test
+forge fmt          # optional: format Solidity
 ```
 
-### Format
+## Deploy (Rootstock Testnet)
 
-```shell
-$ forge fmt
+Load environment variables (example for bash):
+
+```bash
+set -a && source .env && set +a
 ```
 
-### Gas Snapshots
+Deploy (broadcasts one transaction). **`--legacy`** matches what Rootstock testnet accepts in practice; successful kit deploys used legacy-type txs (type `0x0`).
 
-```shell
-$ forge snapshot
+```bash
+forge script script/DeployRootstream.s.sol:DeployRootstream \
+  --rpc-url rootstock-testnet \
+  --broadcast \
+  --legacy \
+  -vvvv
 ```
 
-### Anvil
+To **simulate only** (no chain transaction), run the same command **without** `--broadcast`.
 
-```shell
-$ anvil
-```
+Artifacts and transaction metadata are written under `broadcast/` and `cache/`. After deployment, point the **frontend**, **Gelato** task, and **Envio** config at the new contract address and deployment block.
 
-### Deploy
+## Security and operational notes
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
+- **Recipient payouts** use a low-level `call` with native value. If the recipient **reverts** or is a contract that rejects ETH, `executePayment` reverts and no partial state is committed for that call (balance and `lastExecuted` are updated in the same flow before the transfer in the current implementation — see `Rootstream.sol` for ordering). Operators should use recipients that accept native transfers.
+- **`executePayment` is public** by design for automation; only timing, balance, and stream state gate payouts.
+- Use a **dedicated testnet key** in `.env`; never commit `.env` or real mainnet keys.
 
-### Cast
+## Related packages in this repo
 
-```shell
-$ cast <subcommand>
-```
+- **gelato/** — Web3 Function to call `executePayment` on due streams  
+- **envio/** — HyperIndex schema and indexer for contract events  
+- **frontend/** — Dashboard wired to the contract and Envio GraphQL  
 
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+A top-level README ties the stack together once those sections are documented.

@@ -1,4 +1,4 @@
-import { gql } from "urql";
+import { gql } from "@apollo/client";
 
 export const ANALYTICS_QUERY = gql`
   query Analytics {
@@ -16,11 +16,7 @@ export const ANALYTICS_QUERY = gql`
 
 export const USER_STREAMS_QUERY = gql`
   query UserStreams($address: String!) {
-    Stream(
-      where: { sender: { id: { _eq: $address } } }
-      order_by: { createdAt: desc }
-      limit: 100
-    ) {
+    Stream(where: { sender: { id: { _eq: $address } } }, order_by: { createdAt: desc }, limit: 100) {
       id
       streamId
       active
@@ -42,11 +38,7 @@ export const USER_STREAMS_QUERY = gql`
 
 export const USER_PAYMENTS_QUERY = gql`
   query UserPayments($address: String!) {
-    Payment(
-      where: { sender: { id: { _eq: $address } } }
-      order_by: { executedAt: desc }
-      limit: 200
-    ) {
+    Payment(where: { sender: { id: { _eq: $address } } }, order_by: { executedAt: desc }, limit: 200) {
       id
       amount
       executedAt
