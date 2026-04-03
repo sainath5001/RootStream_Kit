@@ -1,6 +1,7 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useEffect, useState } from "react";
 import { useAccount, useChainId } from "wagmi";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { IconMenu } from "@/components/ui/Icons";
@@ -8,6 +9,11 @@ import { IconMenu } from "@/components/ui/Icons";
 export function Topbar({ onMenu }: { onMenu?: () => void }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <header className="sticky top-0 z-20 border-b border-[var(--rs-border)] bg-[rgba(11,11,11,0.72)] backdrop-blur">
@@ -25,7 +31,7 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
             <span className="text-sm font-semibold text-white">Rootstream_kit</span>
           </div>
           <div className="hidden text-xs text-[var(--rs-muted)] sm:block">
-            {isConnected ? (
+            {mounted && isConnected ? (
               <>
                 Network: <span className="text-white">{chainId}</span> ·{" "}
                 <span className="font-mono text-white">

@@ -5,8 +5,8 @@
   "description": "Envio HyperIndex for Rootstream (Rootstock Testnet)",
   "scripts": {
     "codegen": "pnpm envio codegen",
-    "dev": "pnpm envio dev",
-    "start": "pnpm envio start"
+    "dev": "NODE_OPTIONS=--dns-result-order=ipv4first pnpm envio dev",
+    "start": "NODE_OPTIONS=--dns-result-order=ipv4first pnpm envio start"
   },
   "dependencies": {
     "envio": "^2.32.10"
